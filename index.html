@@ -1,0 +1,1145 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Текст → PDF / TXT</title>
+<style>
+  :root{
+    --bg:#0f1220; --card:#1a1f35; --accent:#4f8cff; --accent2:#2ecc71;
+    --text:#e8ecff; --muted:#94a0c4; --danger:#ff5d5d;
+    --hit:#ffd54a; --hit-active:#ff6b3d; --edit:#e67e22;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%;margin:0}
+  body{
+    font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+    background:var(--bg);color:var(--text);
+    display:flex;flex-direction:column;
+    padding:env(safe-area-inset-top) env(safe-area-inset-right)
+            env(safe-area-inset-bottom) env(safe-area-inset-left);
+  }
+  header{padding:10px 16px 4px;text-align:center}
+  h1{font-size:17px;margin:0 0 3px}
+  header p{font-size:12px;color:var(--muted);margin:0}
+  main{flex:1;display:flex;flex-direction:column;padding:6px 12px 10px;gap:8px;min-height:0}
+  .btn{
+    width:100%;padding:13px;border:0;border-radius:14px;
+    font-size:15px;font-weight:600;color:#fff;cursor:pointer;
+    background:var(--accent);transition:transform .05s,opacity .2s;
+    display:flex;align-items:center;justify-content:center;gap:8px;
+    text-align:center;
+    touch-action:manipulation;
+  }
+  .btn:active{transform:scale(.98)}
+  .btn[disabled]{opacity:.5;cursor:not-allowed}
+  .btn.copy{background:var(--accent2)}
+  .btn.clear{background:#7a2e2e}
+  .btn.txt{background:#3498db}
+  .btn.pdf{background:#9b59b6}
+  .btn.edit{background:var(--edit)}
+  input[type=file]{display:none}
+  .row{display:flex;gap:8px}
+  .row .btn{flex:1;font-size:14px;padding:12px 6px}
+  #status{font-size:13px;color:var(--muted);text-align:center;min-height:16px}
+  #status.error{color:var(--danger)}
+  #status.ok{color:var(--accent2)}
+  #status.warn{color:var(--hit)}
+
+  .progress-wrap{
+    display:flex; gap:8px; align-items:center;
+  }
+  .progress-wrap[hidden]{ display:none; }
+  .progress-wrap progress{
+    flex:1; height:8px; appearance:none; border:0;
+    border-radius:4px; overflow:hidden; background:#2a3252;
+  }
+  .progress-wrap progress::-webkit-progress-bar{
+    background:#2a3252; border-radius:4px;
+  }
+  .progress-wrap progress::-webkit-progress-value{
+    background:var(--accent); border-radius:4px;
+    transition:width .15s linear;
+  }
+  .progress-wrap progress::-moz-progress-bar{
+    background:var(--accent); border-radius:4px;
+  }
+  .progress-wrap .cancel{
+    width:36px; height:36px; font-size:14px;
+    background:#2a3252; color:var(--danger);
+    flex-shrink:0;
+  }
+  .progress-wrap .cancel:active{ background:#36407a; }
+  .progress-wrap .cancel[disabled]{ opacity:.35; }
+
+  .search-wrap{
+    display:flex;gap:8px;align-items:center;
+    background:var(--card);border:1px solid #2a3252;
+    border-radius:14px;padding:6px 8px;
+  }
+  #search{
+    flex:1;min-width:0;background:transparent;border:0;outline:0;
+    color:var(--text);font-size:15px;padding:8px 6px;font-family:inherit;
+  }
+  #search::placeholder{color:var(--muted)}
+  .search-nav{display:flex;align-items:center;gap:4px;flex-shrink:0}
+  .nav-btn{
+    background:#2a3252;border:0;color:var(--text);
+    width:44px;height:44px;border-radius:10px;font-size:15px;
+    display:flex;align-items:center;justify-content:center;cursor:pointer;
+    touch-action:manipulation;
+  }
+  .nav-btn:active{background:#36407a}
+  .nav-btn[disabled]{opacity:.4}
+  #counter{
+    font-size:12px;color:var(--muted);min-width:62px;
+    text-align:center;font-variant-numeric:tabular-nums;
+  }
+
+  .text-area{
+    flex:1;width:100%;min-height:120px;
+    background:var(--card);color:var(--text);
+    border:1px solid #2a3252;border-radius:14px;
+    padding:12px;font-size:15px;line-height:1.45;
+    font-family:ui-monospace,Menlo,Consolas,monospace;
+    -webkit-overflow-scrolling:touch;
+  }
+  #output{overflow-y:auto;white-space:pre-wrap;word-break:break-word}
+  #output:empty::before{
+    content:"Здесь появится текст — загрузи файл или нажми «✏️ Написать / редактировать текст»";
+    color:var(--muted);
+  }
+  #editor{display:none;resize:none;outline:none}
+  mark.hit{background:var(--hit);color:#111;padding:0 1px;border-radius:3px}
+  mark.hit.active{background:var(--hit-active);color:#fff;box-shadow:0 0 0 1px #fff}
+
+  .btn:focus-visible,
+  .nav-btn:focus-visible,
+  .link:focus-visible,
+  #search:focus-visible,
+  #editor:focus-visible{
+    outline:2px solid var(--accent);
+    outline-offset:2px;
+  }
+
+  .hint{
+    font-size:11px;color:var(--muted);text-align:center;
+    line-height:1.4;margin:2px 0 0;
+  }
+  .link{
+    background:none;border:0;color:var(--accent);
+    text-decoration:underline;font:inherit;cursor:pointer;padding:0;
+    touch-action:manipulation;
+  }
+  .link[disabled]{opacity:.4;cursor:not-allowed;text-decoration:none}
+
+  #toast{
+    position:fixed;left:50%;bottom:calc(env(safe-area-inset-bottom) + 80px);
+    transform:translateX(-50%) translateY(20px);
+    background:var(--accent2);color:#fff;padding:10px 18px;border-radius:20px;
+    font-size:14px;opacity:0;pointer-events:none;transition:all .25s;z-index:10;
+    max-width:85vw;text-align:center;
+  }
+  #toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+  #toast.err{background:var(--danger)}
+
+  /* Drag&drop overlay */
+  body.drag-over::after{
+    content:"📂 Отпустите файл";
+    position:fixed;inset:8px;display:flex;align-items:center;justify-content:center;
+    background:rgba(79,140,255,.15);
+    border:3px dashed var(--accent);border-radius:18px;
+    font-size:20px;color:var(--text);font-weight:600;
+    pointer-events:none;z-index:100;
+  }
+</style>
+</head>
+<body>
+  <header>
+    <h1>Текст → PDF / TXT</h1>
+    <p>Извлеки · напиши · найди · сохрани</p>
+  </header>
+
+  <main>
+    <input id="file" type="file"
+           accept="application/pdf,.pdf,.txt,.md,.csv,.tsv,.log,.json,.xml,.srt,.vtt,text/plain,text/markdown,text/csv,image/png,image/jpeg,image/webp,image/bmp,image/gif,.png,.jpg,.jpeg,.webp,.bmp,.gif">
+    <button class="btn" id="pickBtn">📂 Выбрать файл <span style="font-size:11px;opacity:.75">(или перетащи)</span></button>
+    <button class="btn edit" id="editBtn">✏️ Написать / редактировать текст</button>
+
+    <div class="search-wrap" id="searchWrap">
+      <input id="search" type="search" aria-label="Поиск по тексту"
+             placeholder="🔍 Поиск: слово, символ, число…"
+             inputmode="search" autocomplete="off" autocorrect="off"
+             autocapitalize="off" spellcheck="false">
+      <div class="search-nav">
+        <button class="nav-btn" id="prevBtn" disabled aria-label="Предыдущее">◀</button>
+        <span id="counter" aria-live="polite">0 / 0</span>
+        <button class="nav-btn" id="nextBtn" disabled aria-label="Следующее">▶</button>
+      </div>
+    </div>
+
+    <div id="status" role="status" aria-live="polite" aria-atomic="true"></div>
+
+    <div id="progressWrap" class="progress-wrap" hidden>
+      <progress id="progress" max="1" value="0" aria-label="Прогресс обработки"></progress>
+      <button class="nav-btn cancel" id="cancelBtn" aria-label="Отменить операцию" disabled>✕</button>
+    </div>
+
+    <div id="output" class="text-area" dir="auto"></div>
+    <textarea id="editor" class="text-area" dir="auto" spellcheck="false"
+              placeholder="Пиши здесь… затем нажми «✅ Сохранить текст»"></textarea>
+
+    <div class="row">
+      <button class="btn copy" id="copyBtn" disabled>📋 Копировать</button>
+      <button class="btn clear" id="clearBtn" disabled>🗑 Очистить</button>
+    </div>
+    <div class="row">
+      <button class="btn txt" id="txtBtn" disabled>💾 TXT</button>
+      <button class="btn pdf" id="pdfBtn" disabled>💾 PDF</button>
+    </div>
+    <p class="hint">
+      Если PDF не создаётся или нужен иврит — <button class="link" id="printBtn">открой печать → «Сохранить как PDF»</button>
+    </p>
+  </main>
+
+  <div id="toast" role="status" aria-live="polite" aria-atomic="true"></div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"
+          crossorigin="anonymous"
+          onerror="(window.__cdnFailed=window.__cdnFailed||[]).push('PDF.js')"></script>
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"
+          crossorigin="anonymous"
+          onerror="(window.__cdnFailed=window.__cdnFailed||[]).push('Tesseract')"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"
+          crossorigin="anonymous"
+          onerror="(window.__cdnFailed=window.__cdnFailed||[]).push('jsPDF')"></script>
+  <script>
+    if (typeof pdfjsLib !== 'undefined'){
+      pdfjsLib.GlobalWorkerOptions.workerSrc =
+        'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+    }
+
+    const $file    = document.getElementById('file');
+    const $pick    = document.getElementById('pickBtn');
+    const $editBtn = document.getElementById('editBtn');
+    const $printBtn= document.getElementById('printBtn');
+    const $status  = document.getElementById('status');
+    const $output  = document.getElementById('output');
+    const $editor  = document.getElementById('editor');
+    const $search  = document.getElementById('search');
+    const $searchWrap = document.getElementById('searchWrap');
+    const $prev    = document.getElementById('prevBtn');
+    const $next    = document.getElementById('nextBtn');
+    const $counter = document.getElementById('counter');
+    const $copy    = document.getElementById('copyBtn');
+    const $clear   = document.getElementById('clearBtn');
+    const $txtBtn  = document.getElementById('txtBtn');
+    const $pdfBtn  = document.getElementById('pdfBtn');
+    const $toast   = document.getElementById('toast');
+    const $progressWrap = document.getElementById('progressWrap');
+    const $progress     = document.getElementById('progress');
+    const $cancelBtn    = document.getElementById('cancelBtn');
+
+    const TEXT_EXT  = /\.(txt|md|csv|tsv|log|json|xml|srt|vtt)$/i;
+    const IMAGE_EXT = /\.(png|jpe?g|webp|bmp|gif)$/i;
+    // FIX: снижено с 20000 → 3000, чтобы мобилки не фризили на больших текстах
+    const MAX_MATCHES = 3000;
+
+    let rawText = '';
+    let matches = [];
+    let currentIdx = 0;
+    let searchTruncated = false;
+    let searchTimer = null;
+    let editMode = false;
+    let busy = false;
+    let pendingPdf = null;
+    let sourceFilename = '';
+    let currentAbort = null;
+
+    /* ---------- UI helpers ---------- */
+    function setStatus(msg, kind=''){
+      $status.textContent = msg;
+      $status.classList.remove('error','ok','warn');
+      if (kind) $status.classList.add(kind);
+    }
+    function showToast(msg, isError=false){
+      $toast.textContent = msg;
+      $toast.classList.toggle('err', !!isError);
+      $toast.classList.add('show');
+      clearTimeout(showToast._t);
+      showToast._t = setTimeout(()=>$toast.classList.remove('show'), 2200);
+    }
+    function setProgress(v){
+      $progressWrap.hidden = false;
+      const clamped = Math.max(0, Math.min(1, v || 0));
+      $progress.value = clamped;
+    }
+    function hideProgress(){
+      $progressWrap.hidden = true;
+      $progress.value = 0;
+    }
+    function cancelOperation(){
+      if (!busy || !currentAbort) return;
+      currentAbort.cancelled = true;
+      if (currentAbort.worker){
+        try { currentAbort.worker.terminate(); } catch(_){}
+      }
+      if (currentAbort.abortController){
+        try { currentAbort.abortController.abort(); } catch(_){}
+      }
+      setStatus('Отмена…');
+    }
+    $cancelBtn.addEventListener('click', cancelOperation);
+
+    function setBusy(b, cancelable=true){
+      busy = b;
+      $file.disabled = b;
+      $pick.disabled = b;
+      $cancelBtn.disabled = !(b && cancelable && currentAbort);
+      if (!b) hideProgress();
+      updateButtons();
+    }
+    function updateButtons(){
+      const has = !!rawText && !editMode && !busy;
+      $copy.disabled   = !has;
+      $clear.disabled  = (!rawText && !editMode) || busy;
+      $txtBtn.disabled = !has;
+      $pdfBtn.disabled = !has;
+      $pdfBtn.title = (has && hasRTLText(rawText))
+        ? '⚠️ RTL-текст: jsPDF выдаст нечитаемый PDF. Используй «Печать → Сохранить как PDF».'
+        : '';
+      $editBtn.disabled  = busy;
+      $printBtn.disabled = busy;
+    }
+    function clearPendingPdf(){
+      pendingPdf = null;
+      $pdfBtn.textContent = '💾 PDF';
+    }
+    function escapeHtml(s){
+      return s.replace(/[&<>"']/g, c => ({
+        '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+      }[c]));
+    }
+    function hasRTLText(s){
+      return /[\u0590-\u05FF\u0600-\u06FF\u0750-\u077F\uFB1D-\uFDFF\uFE70-\uFEFF]/.test(s);
+    }
+    function ensureLib(which){
+      if (which === 'pdfjs' && typeof pdfjsLib === 'undefined'){
+        throw new Error('PDF.js не загрузился. Проверь интернет и перезагрузи страницу.');
+      }
+      if (which === 'tesseract' && typeof Tesseract === 'undefined'){
+        throw new Error('Tesseract (OCR) не загрузился. Проверь интернет.');
+      }
+      if (which === 'jspdf' && !(window.jspdf && window.jspdf.jsPDF)){
+        throw new Error('jsPDF не загрузился. Проверь интернет или используй «Печать → Сохранить как PDF» внизу.');
+      }
+    }
+
+    /* ---------- Режим редактирования ---------- */
+    function toggleEdit(){
+      if (busy) return;
+      if (!editMode){
+        $editor.value = rawText;
+        $output.style.display = 'none';
+        $editor.style.display = 'block';
+        $searchWrap.style.display = 'none';
+        $editor.focus();
+        try { $editor.setSelectionRange($editor.value.length, $editor.value.length); } catch(_){}
+        editMode = true;
+        $editBtn.textContent = '✅ Сохранить текст';
+        setStatus('Режим редактирования');
+        updateButtons();
+      } else {
+        const before = rawText;
+        rawText = $editor.value;
+        if (before !== rawText) clearPendingPdf();
+        $editor.style.display = 'none';
+        $output.style.display = 'block';
+        $searchWrap.style.display = '';
+        editMode = false;
+        $editBtn.textContent = '✏️ Написать / редактировать текст';
+        $output.textContent = rawText;
+        if ($search.value){
+          runSearch(true);
+        } else {
+          matches = []; currentIdx = 0; searchTruncated = false;
+          updateNavState();
+        }
+        setStatus(rawText ? `Готово. Символов: ${rawText.length}` : 'Пусто', rawText ? 'ok' : '');
+        updateButtons();
+      }
+    }
+    $editBtn.addEventListener('click', toggleEdit);
+
+    /* ---------- Поиск ---------- */
+    function updateNavState(){
+      const has = matches.length > 0;
+      $prev.disabled = !has;
+      $next.disabled = !has;
+      if (!has){ $counter.textContent = '0 / 0'; return; }
+      const total = searchTruncated ? `${matches.length}+` : matches.length;
+      $counter.textContent = `${currentIdx+1} / ${total}`;
+    }
+    function clearSearchUI(){
+      $search.value = '';
+      matches = []; currentIdx = 0; searchTruncated = false;
+      updateNavState();
+    }
+    function runSearch(resetIndex){
+      const q = $search.value;
+      searchTruncated = false;
+      if (!q){
+        matches = []; currentIdx = 0;
+        $output.textContent = rawText;
+        updateNavState(); return;
+      }
+      const esc = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const re = new RegExp(esc, 'gi');
+      matches = [];
+      let m;
+      while ((m = re.exec(rawText)) !== null){
+        if (matches.length >= MAX_MATCHES){ searchTruncated = true; break; }
+        matches.push({ s: m.index, e: m.index + m[0].length });
+      }
+      if (resetIndex) currentIdx = 0;
+      if (!matches.length){
+        $output.textContent = rawText;
+        currentIdx = 0; updateNavState(); return;
+      }
+      if (currentIdx >= matches.length) currentIdx = matches.length - 1;
+      if (currentIdx < 0) currentIdx = 0;
+      renderWithHighlights();
+      updateNavState();
+      scrollToActive();
+      if (searchTruncated){
+        setStatus(`Поиск: показаны первые ${MAX_MATCHES} совпадений`, 'warn');
+      }
+    }
+    function renderWithHighlights(){
+      let html = '', pos = 0;
+      for (let i = 0; i < matches.length; i++){
+        const { s, e } = matches[i];
+        html += escapeHtml(rawText.slice(pos, s));
+        const cls = i === currentIdx ? 'hit active' : 'hit';
+        html += `<mark class="${cls}" data-i="${i}">${escapeHtml(rawText.slice(s, e))}</mark>`;
+        pos = e;
+      }
+      html += escapeHtml(rawText.slice(pos));
+      $output.innerHTML = html;
+    }
+    function setActiveMark(newIdx){
+      const prev = $output.querySelector('mark.hit.active');
+      if (prev) prev.classList.remove('active');
+      const cur = $output.querySelector(`mark[data-i="${newIdx}"]`);
+      if (cur) cur.classList.add('active');
+      return cur;
+    }
+    function scrollToActive(el){
+      const active = el || $output.querySelector('mark.hit.active');
+      if (!active) return;
+      const cRect = $output.getBoundingClientRect();
+      const aRect = active.getBoundingClientRect();
+      const relTop = (aRect.top - cRect.top) + $output.scrollTop;
+      $output.scrollTop = relTop - ($output.clientHeight / 2);
+    }
+    function nextMatch(){
+      if (!matches.length) return;
+      currentIdx = (currentIdx + 1) % matches.length;
+      const el = setActiveMark(currentIdx);
+      updateNavState();
+      scrollToActive(el);
+    }
+    function prevMatch(){
+      if (!matches.length) return;
+      currentIdx = (currentIdx - 1 + matches.length) % matches.length;
+      const el = setActiveMark(currentIdx);
+      updateNavState();
+      scrollToActive(el);
+    }
+    $search.addEventListener('input', () => {
+      clearTimeout(searchTimer);
+      searchTimer = setTimeout(() => runSearch(false), 140);
+    });
+    $search.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter'){
+        e.preventDefault();
+        if (e.shiftKey) prevMatch(); else nextMatch();
+      }
+    });
+    $next.addEventListener('click', nextMatch);
+    $prev.addEventListener('click', prevMatch);
+
+    /* ---------- Загрузка файла ---------- */
+    $pick.addEventListener('click', ()=> $file.click());
+
+    $file.addEventListener('change', () => {
+      const f = $file.files[0];
+      $file.value = '';
+      if (f) processFile(f);
+    });
+
+    async function processFile(f){
+      if (busy || !f) return;
+
+      const prevRawText  = rawText;
+      const prevFilename = sourceFilename;
+      sourceFilename = f.name || '';
+
+      if (editMode){
+        if ($editor.value !== rawText){
+          const ok = confirm('В редакторе есть несохранённый текст. Загрузить файл и потерять изменения?');
+          if (!ok){ sourceFilename = prevFilename; return; }
+        }
+        $editor.style.display = 'none';
+        $output.style.display = 'block';
+        $searchWrap.style.display = '';
+        editMode = false;
+        $editBtn.textContent = '✏️ Написать / редактировать текст';
+      }
+
+      rawText = '';
+      $output.textContent = '';
+      clearSearchUI();
+      clearPendingPdf();
+      currentAbort = { cancelled: false, worker: null, abortController: null };
+      setBusy(true);
+      setStatus('Обработка файла…');
+
+      const name = f.name.toLowerCase();
+      const isPdf   = f.type === 'application/pdf' || name.endsWith('.pdf');
+      const isTxt   = f.type.startsWith('text/') || TEXT_EXT.test(name);
+      const isImage = f.type.startsWith('image/') || IMAGE_EXT.test(name);
+
+      try {
+        if (isPdf)        await handlePdf(f);
+        else if (isTxt)   await handleTxt(f);
+        else if (isImage) await handleImage(f);
+        else {
+          rawText = prevRawText;
+          sourceFilename = prevFilename;
+          $output.textContent = rawText;
+          updateButtons();
+          setStatus('Неподдерживаемый тип файла.', 'error');
+        }
+      } catch (e){
+        rawText = prevRawText;
+        sourceFilename = prevFilename;
+        clearSearchUI();
+        $output.textContent = rawText;
+        updateButtons();
+        if (currentAbort && currentAbort.cancelled){
+          setStatus('Отменено');
+        } else {
+          console.error(e);
+          setStatus('Ошибка: ' + (e.message || e), 'error');
+        }
+      } finally {
+        currentAbort = null;
+        setBusy(false);
+      }
+    }
+
+    /* ---------- Drag & drop ---------- */
+    let dragDepth = 0;
+    function hasFileDrag(e){
+      return e.dataTransfer && Array.from(e.dataTransfer.types || []).includes('Files');
+    }
+    document.addEventListener('dragenter', e => {
+      if (!hasFileDrag(e)) return;
+      dragDepth++;
+      document.body.classList.add('drag-over');
+    });
+    document.addEventListener('dragover', e => {
+      if (!hasFileDrag(e)) return;
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'copy';
+    });
+    document.addEventListener('dragleave', () => {
+      dragDepth = Math.max(0, dragDepth - 1);
+      if (dragDepth === 0) document.body.classList.remove('drag-over');
+    });
+    document.addEventListener('drop', e => {
+      dragDepth = 0;
+      document.body.classList.remove('drag-over');
+      if (!e.dataTransfer || !e.dataTransfer.files || !e.dataTransfer.files.length) return;
+      e.preventDefault();
+      if (busy) return;
+      const f = e.dataTransfer.files[0];
+      if (f) processFile(f);
+    });
+
+    async function handleTxt(file){
+      setStatus('Читаю текстовый файл…');
+      let text = await readTextFile(file);
+      if (currentAbort && currentAbort.cancelled) throw new Error('Отменено');
+      if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
+      rawText = text;
+      clearSearchUI();
+      $output.textContent = rawText;
+      setStatus(`Готово. Символов: ${text.length}`, 'ok');
+    }
+
+    async function readTextFile(file){
+      const buf = await file.arrayBuffer();
+
+      if (buf.byteLength >= 2){
+        const head = new Uint8Array(buf, 0, 2);
+        if (head[0] === 0xFF && head[1] === 0xFE){
+          try { return new TextDecoder('utf-16le').decode(buf); } catch(_){}
+        }
+        if (head[0] === 0xFE && head[1] === 0xFF){
+          try { return new TextDecoder('utf-16be').decode(buf); } catch(_){
+            try {
+              const swapped = new Uint8Array(buf);
+              for (let i = 0; i + 1 < swapped.length; i += 2){
+                const t = swapped[i]; swapped[i] = swapped[i+1]; swapped[i+1] = t;
+              }
+              return new TextDecoder('utf-16le').decode(swapped);
+            } catch(_){}
+          }
+        }
+      }
+
+      const utf8 = new TextDecoder('utf-8', { fatal:false }).decode(buf);
+      const bad = (utf8.match(/\uFFFD/g) || []).length;
+      if (bad === 0) return utf8;
+      try {
+        const cp1251 = new TextDecoder('windows-1251', { fatal:false }).decode(buf);
+        if ((cp1251.match(/\uFFFD/g) || []).length < bad) return cp1251;
+      } catch(_) {}
+      return utf8;
+    }
+
+    async function handleImage(file){
+      ensureLib('tesseract');
+      const abort = currentAbort;
+      const lang = 'rus+eng';
+      setStatus(`OCR (${lang}) — подготовка…`);
+      setProgress(0);
+
+      let worker = null;
+      try {
+        worker = await Tesseract.createWorker(lang, 1, {
+          logger: m => {
+            if (abort && abort.cancelled) return;
+            if (m.status === 'recognizing text'){
+              setStatus(`OCR: ${Math.round((m.progress||0)*100)}%`);
+              setProgress(m.progress || 0);
+            } else if (m.status === 'loading language traineddata'){
+              setStatus(`Загрузка модели: ${Math.round((m.progress||0)*100)}%`);
+              setProgress((m.progress || 0) * 0.3);
+            } else if (m.status){
+              setStatus(`OCR: ${m.status}…`);
+            } else {
+              setStatus('OCR…');
+            }
+          }
+        });
+
+        if (abort) abort.worker = worker;
+
+        if (abort && abort.cancelled){
+          try { await worker.terminate(); } catch(_){}
+          throw new Error('Отменено');
+        }
+
+        const { data } = await worker.recognize(file);
+        if (abort && abort.cancelled) throw new Error('Отменено');
+
+        let text = (data.text || '')
+          .replace(/[ \t]+\n/g,'\n').replace(/\n{3,}/g,'\n\n').trim();
+        rawText = text;
+        clearSearchUI();
+        $output.textContent = rawText;
+        setProgress(1);
+        setStatus(text ? `Готово. Символов: ${text.length}` : 'Текст не распознан.', text ? 'ok' : 'error');
+      } finally {
+        if (worker){
+          try { await worker.terminate(); } catch(_){}
+        }
+      }
+    }
+
+    async function handlePdf(file){
+      ensureLib('pdfjs');
+      const abort = currentAbort;
+      setStatus('Читаю PDF…');
+      setProgress(0);
+      const buf = await file.arrayBuffer();
+      if (abort && abort.cancelled) throw new Error('Отменено');
+
+      const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
+      try {
+        const pages = [];
+
+        for (let p = 1; p <= pdf.numPages; p++){
+          if (abort && abort.cancelled) throw new Error('Отменено');
+          setStatus(`Страница ${p} из ${pdf.numPages}…`);
+          setProgress((p - 1) / pdf.numPages);
+
+          const page = await pdf.getPage(p);
+          const content = await page.getTextContent();
+          const pageText = extractPageText(content);
+          if (pageText.trim()) pages.push(pageText);
+
+          await new Promise(r => setTimeout(r, 0));
+        }
+
+        if (abort && abort.cancelled) throw new Error('Отменено');
+
+        const text = pages.join('\n\n');
+        rawText = text;
+        clearSearchUI();
+        $output.textContent = rawText;
+        setProgress(1);
+
+        if (!text){
+          setStatus('Текста не найдено (возможно, скан без OCR).', 'error');
+        } else if (hasRTLText(text)){
+          setStatus(`Готово. Символов: ${text.length}. RTL — проверьте порядок букв.`, 'warn');
+        } else {
+          setStatus(`Готово. Символов: ${text.length}`, 'ok');
+        }
+      } finally {
+        try { await pdf.destroy(); } catch(_){}
+      }
+    }
+
+    function extractPageText(content){
+      const items = content.items;
+      if (!items || !items.length) return '';
+
+      const heights = [];
+      for (const it of items){ if (it.height > 0) heights.push(it.height); }
+      heights.sort((a, b) => a - b);
+      const medianH = heights.length ? heights[Math.floor(heights.length / 2)] : 10;
+      const yThreshold = Math.max(1, medianH * 0.35);
+
+      const lines = [];
+      let current = [];
+      let lastY = null;
+      let currentY = null;
+
+      const flush = () => {
+        if (current.length) lines.push({ items: current, y: currentY });
+        current = []; lastY = null; currentY = null;
+      };
+
+      for (const it of items){
+        if (typeof it.str !== 'string') continue;
+        const y = it.transform[5];
+
+        if (current.length && lastY !== null){
+          if (Math.abs(y - lastY) > yThreshold) flush();
+        }
+
+        if (it.str.trim() !== ''){
+          current.push(it);
+          lastY = y;
+          if (currentY === null) currentY = y;
+        }
+
+        if (it.hasEOL) flush();
+      }
+      flush();
+
+      const lineStrings = lines.map(line => {
+        const sorted = [...line.items].sort((a, b) => a.transform[4] - b.transform[4]);
+        let s = '', prevX = null, prevW = 0;
+        for (const it of sorted){
+          const x = it.transform[4], w = it.width || 0;
+          if (prevX !== null){
+            const gap = x - (prevX + prevW);
+            if (gap > 1.5 && !s.endsWith(' ') && !it.str.startsWith(' ')) s += ' ';
+          }
+          s += it.str; prevX = x; prevW = w;
+        }
+        return { text: s.replace(/\s+$/,''), y: line.y };
+      });
+
+      if (lineStrings.length < 2){
+        return lineStrings.map(l => l.text).join('\n');
+      }
+
+      const deltas = [];
+      for (let i = 1; i < lineStrings.length; i++){
+        const d = Math.abs(lineStrings[i].y - lineStrings[i-1].y);
+        if (d > 0) deltas.push(d);
+      }
+      deltas.sort((a,b) => a-b);
+      const medianDelta = deltas.length ? deltas[Math.floor(deltas.length/2)] : medianH * 1.2;
+      const blankThreshold = Math.max(medianDelta * 1.6, medianH * 1.8);
+
+      const out = [];
+      for (let i = 0; i < lineStrings.length; i++){
+        if (i > 0){
+          const gap = Math.abs(lineStrings[i].y - lineStrings[i-1].y);
+          if (gap > blankThreshold) out.push('');
+        }
+        out.push(lineStrings[i].text);
+      }
+      return out.join('\n');
+    }
+
+    /* ---------- Копирование ---------- */
+    $copy.addEventListener('click', async () => {
+      if (!rawText) return;
+      try {
+        if (navigator.clipboard && window.isSecureContext){
+          await navigator.clipboard.writeText(rawText);
+        } else {
+          const ta = document.createElement('textarea');
+          ta.value = rawText;
+          ta.style.position = 'fixed'; ta.style.opacity = '0';
+          document.body.appendChild(ta);
+          ta.select(); document.execCommand('copy');
+          document.body.removeChild(ta);
+        }
+        showToast('Скопировано ✓');
+      } catch (e){
+        setStatus('Не удалось скопировать. Выдели текст вручную.', 'error');
+      }
+    });
+
+    /* ---------- Очистить ---------- */
+    $clear.addEventListener('click', () => {
+      if (busy) return;
+      if (!rawText && !$editor.value) return;
+      if (!confirm('Очистить текст?')) return;
+      rawText = '';
+      sourceFilename = '';
+      $output.textContent = '';
+      $editor.value = '';
+      clearSearchUI();
+      clearPendingPdf();
+      setStatus('Очищено');
+      updateButtons();
+    });
+
+    /* ---------- Универсальное сохранение ---------- */
+    async function saveOrShare(blob, filename, mime){
+      if (navigator.canShare && navigator.share){
+        let canFiles = false;
+        try { canFiles = navigator.canShare({ files: [new File([blob], filename, { type: mime })] }); }
+        catch(_) { canFiles = false; }
+        if (canFiles){
+          try {
+            await navigator.share({
+              files: [new File([blob], filename, { type: mime })],
+              title: filename
+            });
+            return { ok: true, method: 'share' };
+          } catch (e){
+            if (e.name === 'AbortError') return { ok: false, method: 'share-cancelled' };
+          }
+        }
+      }
+      if (window.showSaveFilePicker){
+        try {
+          const ext = '.' + (filename.split('.').pop() || 'txt');
+          const handle = await window.showSaveFilePicker({
+            suggestedName: filename,
+            types: [{ description: filename, accept: { [mime]: [ext] } }]
+          });
+          const writable = await handle.createWritable();
+          await writable.write(blob);
+          await writable.close();
+          return { ok: true, method: 'picker' };
+        } catch (e){
+          if (e.name === 'AbortError') return { ok: false, method: 'picker-cancelled' };
+        }
+      }
+      try {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url; a.download = filename; a.rel = 'noopener';
+        a.style.display = 'none';
+        document.body.appendChild(a); a.click(); document.body.removeChild(a);
+        setTimeout(()=>URL.revokeObjectURL(url), 5000);
+        return { ok: true, method: 'download' };
+      } catch (e){
+        return { ok: false, method: 'download-failed', error: e };
+      }
+    }
+
+    function makeFilename(ext){
+      const d = new Date();
+      const pad = n => String(n).padStart(2, '0');
+      const stamp = `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}_${pad(d.getHours())}-${pad(d.getMinutes())}`;
+      let base = 'text';
+      if (sourceFilename){
+        base = sourceFilename.replace(/\.[^.]+$/, '')
+          .replace(/[<>:"/\\|?*\x00-\x1F]/g, '_').slice(0, 40) || 'text';
+      }
+      return `${base}_${stamp}.${ext}`;
+    }
+
+    /* ---------- Сохранить TXT ---------- */
+    $txtBtn.addEventListener('click', async () => {
+      if (!rawText){ setStatus('Нет текста для сохранения.', 'error'); return; }
+      // FIX: try/finally — если saveOrShare бросит, UI не залипнет в busy
+      setBusy(true, false);
+      try {
+        setStatus('Сохраняю TXT…');
+        const blob = new Blob([rawText], { type: 'text/plain;charset=utf-8' });
+        const filename = makeFilename('txt');
+        const r = await saveOrShare(blob, filename, 'text/plain');
+        if (r.ok){
+          setStatus(r.method === 'share'
+            ? 'Открыто меню «Поделиться» — выбери «Сохранить в Файлы»'
+            : `TXT сохранён: ${filename}`, 'ok');
+          if (r.method !== 'share') showToast('TXT сохранён ✓');
+        } else if (r.method === 'share-cancelled' || r.method === 'picker-cancelled'){
+          setStatus('Сохранение отменено');
+        } else {
+          setStatus('Не удалось сохранить. Используй «Копировать».', 'error');
+        }
+      } catch (e){
+        console.error(e);
+        setStatus('Ошибка сохранения TXT: ' + (e.message || e), 'error');
+      } finally {
+        setBusy(false);
+      }
+    });
+
+    /* ---------- PDF через jsPDF + Unicode-шрифт ---------- */
+    const PDF_FONT_URLS = [
+      'https://cdn.jsdelivr.net/npm/dejavu-fonts-ttf@2.37.3/ttf/DejaVuSans.ttf',
+      'https://unpkg.com/dejavu-fonts-ttf@2.37.3/ttf/DejaVuSans.ttf',
+      'https://cdn.jsdelivr.net/gh/dejavu-fonts/dejavu-fonts@version_2_37/ttf/DejaVuSans.ttf'
+    ];
+    const FONT_CACHE = 'convertor-v1';
+    const FONT_CACHE_KEY = 'dejavu-sans-ttf';
+    let pdfFontB64 = null;
+
+    function arrayBufferToBase64(buf){
+      const bytes = new Uint8Array(buf);
+      let binary = '';
+      const chunk = 0x8000;
+      for (let i = 0; i < bytes.length; i += chunk){
+        binary += String.fromCharCode.apply(null, bytes.subarray(i, Math.min(i+chunk, bytes.length)));
+      }
+      return btoa(binary);
+    }
+
+    async function ensurePdfFont(signal){
+      if (pdfFontB64) return pdfFontB64;
+
+      if ('caches' in window){
+        try {
+          const cache = await caches.open(FONT_CACHE);
+          const cached = await cache.match(FONT_CACHE_KEY);
+          if (cached){
+            const buf = await cached.arrayBuffer();
+            if (buf.byteLength > 100000){
+              pdfFontB64 = arrayBufferToBase64(buf);
+              return pdfFontB64;
+            }
+          }
+        } catch(_) {}
+      }
+
+      let lastErr = null;
+      for (const url of PDF_FONT_URLS){
+        try {
+          const resp = await fetch(url, { cache: 'force-cache', signal });
+          if (!resp.ok) throw new Error('HTTP ' + resp.status);
+          const buf = await resp.arrayBuffer();
+          if (buf.byteLength < 100000) throw new Error('слишком маленький файл шрифта');
+
+          if ('caches' in window){
+            try {
+              const cache = await caches.open(FONT_CACHE);
+              await cache.put(FONT_CACHE_KEY, new Response(buf.slice(0), {
+                headers: { 'Content-Type': 'font/ttf' }
+              }));
+            } catch(_) {}
+          }
+
+          pdfFontB64 = arrayBufferToBase64(buf);
+          return pdfFontB64;
+        } catch(e){
+          if (e.name === 'AbortError') throw e;
+          lastErr = e;
+        }
+      }
+      throw new Error('не удалось загрузить шрифт: ' + (lastErr && lastErr.message));
+    }
+
+    async function buildTextPdf(text, onProgress, abort){
+      ensureLib('jspdf');
+      const { jsPDF } = window.jspdf;
+      setStatus('Загрузка шрифта для PDF…');
+      const signal = abort && abort.abortController ? abort.abortController.signal : undefined;
+      const fontB64 = await ensurePdfFont(signal);
+      if (abort && abort.cancelled) throw new Error('Отменено');
+
+      const pdf = new jsPDF({ unit: 'pt', format: 'a4', orientation: 'portrait' });
+      pdf.addFileToVFS('DejaVuSans.ttf', fontB64);
+      pdf.addFont('DejaVuSans.ttf', 'DejaVu', 'normal');
+      pdf.setFont('DejaVu', 'normal');
+
+      const fontSize = 11;
+      const lineH = fontSize * 1.45;
+      const margin = 42;
+      const pageW = pdf.internal.pageSize.getWidth();
+      const pageH = pdf.internal.pageSize.getHeight();
+      const maxW = pageW - margin * 2;
+      const linesPerPage = Math.max(1, Math.floor((pageH - margin * 2) / lineH));
+
+      setStatus('Разбиваю текст на строки…');
+      pdf.setFontSize(fontSize);
+
+      const rawLines = text.split(/\r\n|\r|\n/);
+      const wrapped = [];
+
+      // FIX: адаптивный шаг прогресса — работает и на коротких, и на длинных документах
+      const wrapStep = Math.max(50, Math.floor(rawLines.length / 20));
+
+      for (let i = 0; i < rawLines.length; i++){
+        if (abort && abort.cancelled) throw new Error('Отменено');
+        const line = rawLines[i];
+        if (line === ''){ wrapped.push(''); }
+        else {
+          const parts = pdf.splitTextToSize(line, maxW);
+          if (!parts || parts.length === 0) wrapped.push('');
+          else for (const p of parts) wrapped.push(p);
+        }
+        // обновляем прогресс по шагу ИЛИ на последней строке
+        if (i % wrapStep === wrapStep - 1 || i === rawLines.length - 1){
+          if (onProgress) onProgress((i / rawLines.length) * 0.5);
+          await new Promise(r => setTimeout(r, 0));
+        }
+      }
+
+      setStatus('Собираю PDF…');
+      let idx = 0;
+      let pageNum = 0;
+      while (idx < wrapped.length){
+        if (abort && abort.cancelled) throw new Error('Отменено');
+        if (pageNum > 0) pdf.addPage();
+        pdf.setFontSize(fontSize);
+        let y = margin + fontSize;
+        const end = Math.min(idx + linesPerPage, wrapped.length);
+        for (; idx < end; idx++){
+          const l = wrapped[idx];
+          if (l) pdf.text(l, margin, y);
+          y += lineH;
+        }
+        pageNum++;
+        if (onProgress) onProgress(0.5 + (idx / wrapped.length) * 0.5);
+        await new Promise(r => setTimeout(r, 0));
+      }
+
+      if (pageNum === 0){
+        pdf.setFontSize(fontSize);
+        pdf.text(' ', margin, margin + fontSize);
+      }
+
+      return pdf.output('blob');
+    }
+
+    $pdfBtn.addEventListener('click', async () => {
+      if (!rawText){ setStatus('Нет текста для сохранения.', 'error'); return; }
+
+      if (hasRTLText(rawText)){
+        setStatus('⚠️ Текст содержит RTL-символы (иврит/арабский). jsPDF не поддерживает BiDi. Используй «Печать → Сохранить как PDF» внизу.', 'error');
+        showToast('RTL-текст: используй «Печать»', true);
+        return;
+      }
+
+      if (pendingPdf){
+        setBusy(true, false);
+        setStatus('Сохраняю PDF…');
+        try {
+          const r = await saveOrShare(pendingPdf.blob, pendingPdf.filename, 'application/pdf');
+          if (r.ok){
+            setStatus(r.method === 'share'
+              ? 'Открыто меню «Поделиться» — выбери «Сохранить в Файлы»'
+              : `PDF сохранён: ${pendingPdf.filename} (${Math.round(pendingPdf.blob.size/1024)} КБ)`, 'ok');
+            if (r.method !== 'share') showToast('PDF сохранён ✓');
+            clearPendingPdf();
+          } else if (r.method === 'share-cancelled' || r.method === 'picker-cancelled'){
+            setStatus('Сохранение отменено — PDF готов, нажми «Скачать готовый PDF» ещё раз');
+          } else {
+            setStatus('Не удалось сохранить PDF. Попробуй «Печать → Сохранить как PDF» внизу.', 'error');
+          }
+        } catch (e){
+          console.error(e);
+          setStatus('Ошибка сохранения: ' + (e.message || e), 'error');
+        } finally {
+          setBusy(false);
+        }
+        return;
+      }
+
+      currentAbort = { cancelled: false, worker: null, abortController: new AbortController() };
+      setBusy(true, true);
+      setStatus('Готовлю PDF…');
+      setProgress(0);
+      try {
+        const blob = await buildTextPdf(rawText, p => {
+          setProgress(p);
+          setStatus(`Сборка PDF… ${Math.round(p*100)}%`);
+        }, currentAbort);
+        pendingPdf = { blob, filename: makeFilename('pdf') };
+        $pdfBtn.textContent = '💾 Скачать готовый PDF';
+        setStatus('PDF готов — нажми «Скачать готовый PDF» ещё раз', 'ok');
+        showToast('PDF готов — нажми ещё раз ✓');
+      } catch (e){
+        if (currentAbort && currentAbort.cancelled){
+          setStatus('Отменено');
+        } else {
+          console.error(e);
+          setStatus('Ошибка PDF: ' + (e.message || e) + '. Используй печать внизу.', 'error');
+        }
+      } finally {
+        currentAbort = null;
+        setBusy(false);
+      }
+    });
+
+    /* ---------- Печать → Сохранить как PDF (fallback) ---------- */
+    $printBtn.addEventListener('click', () => {
+      if (busy) return;
+      if (!rawText){ setStatus('Нет текста для печати.', 'error'); return; }
+      const html = `<!doctype html>
+<html><head><meta charset="utf-8"><title>Печать текста</title>
+<style>
+  @page { size: A4; margin: 14mm; }
+  body { font-family: system-ui, -apple-system, "Noto Sans", Arial, sans-serif;
+         font-size: 12pt; line-height: 1.5; color: #000; background: #fff;
+         white-space: pre-wrap; word-break: break-word; margin: 0; }
+</style></head>
+<body dir="auto">${escapeHtml(rawText)}<script>
+  window.addEventListener('load', () => setTimeout(() => window.print(), 300));
+<\/script></body></html>`;
+      const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const w = window.open(url, '_blank');
+      if (!w){ showToast('Разреши всплывающие окна', true); return; }
+      setTimeout(()=>URL.revokeObjectURL(url), 60000);
+      setStatus('Открыто окно печати → выбери «Сохранить как PDF»', 'ok');
+    });
+
+    /* ---------- проверка CDN ---------- */
+    (function checkLibs(){
+      const missing = [];
+      if (typeof pdfjsLib === 'undefined') missing.push('PDF.js');
+      if (typeof Tesseract === 'undefined') missing.push('Tesseract (OCR)');
+      if (!(window.jspdf && window.jspdf.jsPDF)) missing.push('jsPDF');
+      if (missing.length){
+        setStatus('Не загружены: ' + missing.join(', ') +
+                  '. Проверь интернет — часть функций недоступна.', 'error');
+      }
+    })();
+
+    window.addEventListener('beforeunload', (e) => {
+      if (editMode && $editor.value !== rawText){
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    });
+  </script>
+</body>
+</html>
