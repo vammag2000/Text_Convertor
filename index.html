@@ -4,6 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Текст → PDF / TXT</title>
+<!-- Подключение манифеста для установки приложения на главный экран -->
+<link rel="manifest" href="manifest.json">
 <style>
   :root{
     --bg:#0f1220; --card:#1a1f35; --accent:#4f8cff; --accent2:#2ecc71;
@@ -37,7 +39,7 @@
   .btn.clear{background:#7a2e2e}
   .btn.txt{background:#3498db}
   .btn.pdf{background:#9b59b6}
-  .btn.edit{background:var(--edit)}
+  .btn.edit{background:#e67e22}
   input[type=file]{display:none}
   .row{display:flex;gap:8px}
   .row .btn{flex:1;font-size:14px;padding:12px 6px}
@@ -143,7 +145,6 @@
   #toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
   #toast.err{background:var(--danger)}
 
-  /* Drag&drop overlay */
   body.drag-over::after{
     content:"📂 Отпустите файл";
     position:fixed;inset:8px;display:flex;align-items:center;justify-content:center;
@@ -242,7 +243,6 @@
 
     const TEXT_EXT  = /\.(txt|md|csv|tsv|log|json|xml|srt|vtt)$/i;
     const IMAGE_EXT = /\.(png|jpe?g|webp|bmp|gif)$/i;
-    // FIX: снижено с 20000 → 3000, чтобы мобилки не фризили на больших текстах
     const MAX_MATCHES = 3000;
 
     let rawText = '';
@@ -256,7 +256,6 @@
     let sourceFilename = '';
     let currentAbort = null;
 
-    /* ---------- UI helpers ---------- */
     function setStatus(msg, kind=''){
       $status.textContent = msg;
       $status.classList.remove('error','ok','warn');
@@ -335,7 +334,6 @@
       }
     }
 
-    /* ---------- Режим редактирования ---------- */
     function toggleEdit(){
       if (busy) return;
       if (!editMode){
@@ -371,7 +369,6 @@
     }
     $editBtn.addEventListener('click', toggleEdit);
 
-    /* ---------- Поиск ---------- */
     function updateNavState(){
       const has = matches.length > 0;
       $prev.disabled = !has;
@@ -469,7 +466,6 @@
     $next.addEventListener('click', nextMatch);
     $prev.addEventListener('click', prevMatch);
 
-    /* ---------- Загрузка файла ---------- */
     $pick.addEventListener('click', ()=> $file.click());
 
     $file.addEventListener('change', () => {
@@ -539,7 +535,6 @@
       }
     }
 
-    /* ---------- Drag & drop ---------- */
     let dragDepth = 0;
     function hasFileDrag(e){
       return e.dataTransfer && Array.from(e.dataTransfer.types || []).includes('Files');
@@ -781,7 +776,6 @@
       return out.join('\n');
     }
 
-    /* ---------- Копирование ---------- */
     $copy.addEventListener('click', async () => {
       if (!rawText) return;
       try {
@@ -801,7 +795,6 @@
       }
     });
 
-    /* ---------- Очистить ---------- */
     $clear.addEventListener('click', () => {
       if (busy) return;
       if (!rawText && !$editor.value) return;
@@ -816,7 +809,6 @@
       updateButtons();
     });
 
-    /* ---------- Универсальное сохранение ---------- */
     async function saveOrShare(blob, filename, mime){
       if (navigator.canShare && navigator.share){
         let canFiles = false;
@@ -874,10 +866,8 @@
       return `${base}_${stamp}.${ext}`;
     }
 
-    /* ---------- Сохранить TXT ---------- */
     $txtBtn.addEventListener('click', async () => {
       if (!rawText){ setStatus('Нет текста для сохранения.', 'error'); return; }
-      // FIX: try/finally — если saveOrShare бросит, UI не залипнет в busy
       setBusy(true, false);
       try {
         setStatus('Сохраняю TXT…');
@@ -902,7 +892,6 @@
       }
     });
 
-    /* ---------- PDF через jsPDF + Unicode-шрифт ---------- */
     const PDF_FONT_URLS = [
       'https://cdn.jsdelivr.net/npm/dejavu-fonts-ttf@2.37.3/ttf/DejaVuSans.ttf',
       'https://unpkg.com/dejavu-fonts-ttf@2.37.3/ttf/DejaVuSans.ttf',
@@ -992,8 +981,6 @@
 
       const rawLines = text.split(/\r\n|\r|\n/);
       const wrapped = [];
-
-      // FIX: адаптивный шаг прогресса — работает и на коротких, и на длинных документах
       const wrapStep = Math.max(50, Math.floor(rawLines.length / 20));
 
       for (let i = 0; i < rawLines.length; i++){
@@ -1005,7 +992,6 @@
           if (!parts || parts.length === 0) wrapped.push('');
           else for (const p of parts) wrapped.push(p);
         }
-        // обновляем прогресс по шагу ИЛИ на последней строке
         if (i % wrapStep === wrapStep - 1 || i === rawLines.length - 1){
           if (onProgress) onProgress((i / rawLines.length) * 0.5);
           await new Promise(r => setTimeout(r, 0));
@@ -1099,7 +1085,6 @@
       }
     });
 
-    /* ---------- Печать → Сохранить как PDF (fallback) ---------- */
     $printBtn.addEventListener('click', () => {
       if (busy) return;
       if (!rawText){ setStatus('Нет текста для печати.', 'error'); return; }
@@ -1122,7 +1107,6 @@
       setStatus('Открыто окно печати → выбери «Сохранить как PDF»', 'ok');
     });
 
-    /* ---------- проверка CDN ---------- */
     (function checkLibs(){
       const missing = [];
       if (typeof pdfjsLib === 'undefined') missing.push('PDF.js');
